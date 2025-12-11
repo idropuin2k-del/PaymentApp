@@ -3,107 +3,123 @@ name: Build iOS App
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest-stable
+    - name: Select Xcode Version
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
-    - name: List Xcode Projects
+    - name: Show Xcode and SDK Info
       run: |
-        ls -la
-        find . -name "*.xcodeproj" -o -name "*.xcworkspace"
+        xcodebuild -version
+        xcodebuild -showsdks
 
-    - name: Build for iOS Simulator (No Signing Required)
+    - name: List Available Simulators
+      run: xcrun simctl list devices available
+
+    - name: Build Project
       run: |
-        xcodebuild build \
+        xcodebuild clean build \
           -project PaymentApp.xcodeproj \
           -scheme PaymentApp \
           -configuration Release \
-          -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
+          -sdk iphoneos \
+          -allowProvisioningUpdates \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          ONLY_ACTIVE_ARCH=NO
+          DEVELOPMENT_TEAM="" \
+          PROVISIONING_PROFILE_SPECIFIER=""
 
-    - name: Create Simulator Build Archive
+    - name: Create Archive
       run: |
         xcodebuild archive \
           -project PaymentApp.xcodeproj \
           -scheme PaymentApp \
           -configuration Release \
-          -archivePath PaymentApp.xcarchive \
-          -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
+          -sdk iphoneos \
+          -archivePath ./PaymentApp.xcarchive \
+          -allowProvisioningUpdates \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          SKIP_INSTALL=NO
+          DEVELOPMENT_TEAM="" \
+          PROVISIONING_PROFILE_SPECIFIER=""
 
-    - name: Create Basic IPA (Unsigned for Sideloading)
+    - name: Create IPA Package
       run: |
-        # Create basic app package
+        # Create Payload directory
         mkdir -p Payload
-        cp -r PaymentApp.xcarchive/Products/Applications/PaymentApp.app Payload/
-        zip -r PaymentApp-Unsigned.ipa Payload/
 
-        # Also create a properly structured IPA for sideloading
-        mkdir -p ipa-output
-        cp PaymentApp-Unsigned.ipa ipa-output/PaymentApp.ipa
+        # Copy the app to Payload
+        cp -r ./PaymentApp.xcarchive/Products/Applications/PaymentApp.app Payload/
+
+        # Create the IPA
+        zip -r PaymentApp.ipa Payload/
+
+        # Verify the IPA was created
+        ls -la PaymentApp.ipa
+        file PaymentApp.ipa
 
     - name: Upload IPA Artifact
       uses: actions/upload-artifact@v4
       with:
         name: PaymentApp-IPA
-        path: ipa-output/PaymentApp.ipa
+        path: PaymentApp.ipa
         retention-days: 30
 
-    - name: Upload Build Logs
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: |
-          /var/folders/**/xcodebuild.log
-          DerivedData/*/Build/Intermediates.noindex/**/build-log.txt
-        retention-days: 7
-
     - name: Create Release
-      if: github.ref == 'refs/heads/main' && success()
+      if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.run_number }}
         name: PaymentApp v${{ github.run_number }}
         body: |
-          📱 **PaymentApp Release - Ready for Sideloading!**
+          📱 **PaymentApp - Ready for Sideloading!**
 
-          **Features:**
-          - 💰 Balance display with gradient UI
-          - ➕ Add cash (custom amounts + quick buttons)
+          **🚀 Features:**
+          - 💰 Balance display with beautiful gradient UI
+          - ➕ Add cash (custom amounts + quick buttons: $10, $20, $50, $100, $200, $500)
           - ➖ Cash out with balance validation
-          - 📊 Transaction history
-          - 🎮 Demo data included ($250 starting balance)
+          - 📊 Complete transaction history
+          - 🎮 Demo data included (starts with $250 balance)
 
-          **Sideloading Instructions:**
-          1. Download `PaymentApp.ipa` below
-          2. Open **Sideloadly** on your computer
-          3. Connect your iPhone/iPad via USB
-          4. Drag the .ipa file to Sideloadly
-          5. Enter your Apple ID credentials
-          6. Click "Start" and wait for installation
+          **📱 Sideloading Instructions:**
 
-          **Note:** This is an unsigned build for sideloading. Sideloadly will handle the signing process.
+          1. **Download** `PaymentApp.ipa` from the assets below
+          2. **Install Sideloadly** from https://sideloadly.io
+          3. **Connect your iPhone/iPad** via USB to your computer
+          4. **Open Sideloadly** and drag the .ipa file into it
+          5. **Enter your Apple ID** credentials
+          6. **Click "Start"** and wait for installation
 
-        files: ipa-output/PaymentApp.ipa
+          **✅ What You'll Get:**
+          - Complete payment app demo on your iOS device
+          - All features working locally (no internet required)
+          - Safe to use (no real money, just demo data)
+
+          **📋 System Requirements:**
+          - iOS 16.0 or later
+          - Any iPhone or iPad
+          - Free Apple ID for sideloading
+
+        files: PaymentApp.ipa
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Build Logs on Failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          ~/Library/Developer/Xcode/DerivedData/**/Build/**/*.log
+          /tmp/xcodebuild.log
+        retention-days: 7
