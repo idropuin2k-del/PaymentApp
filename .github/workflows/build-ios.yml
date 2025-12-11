@@ -62,7 +62,7 @@ jobs:
         cp PaymentApp-Unsigned.ipa ipa-output/PaymentApp.ipa
 
     - name: Upload IPA Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PaymentApp-IPA
         path: ipa-output/PaymentApp.ipa
@@ -70,7 +70,7 @@ jobs:
 
     - name: Upload Build Logs
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-logs
         path: |
