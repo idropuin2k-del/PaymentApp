@@ -1,0 +1,75 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Build Archive
+      run: |
+        xcodebuild archive \
+          -project PaymentApp.xcodeproj \
+          -scheme PaymentApp \
+          -configuration Release \
+          -archivePath PaymentApp.xcarchive \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Export IPA
+      run: |
+        xcodebuild -exportArchive \
+          -archivePath PaymentApp.xcarchive \
+          -exportPath ipa \
+          -exportOptionsPlist ExportOptions.plist
+
+    - name: Upload IPA Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: PaymentApp-IPA
+        path: ipa/PaymentApp.ipa
+        retention-days: 30
+
+    - name: Create Release
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.run_number }}
+        name: PaymentApp v${{ github.run_number }}
+        body: |
+          📱 PaymentApp Release
+
+          **Download the .ipa file below and sideload with Sideloadly**
+
+          Features:
+          - Balance display
+          - Add cash functionality
+          - Cash out with validation
+          - Transaction history
+
+          **Sideloading Instructions:**
+          1. Download PaymentApp.ipa
+          2. Open Sideloadly
+          3. Connect your iOS device
+          4. Drag the .ipa to Sideloadly
+          5. Enter your Apple ID and install
+
+        files: ipa/PaymentApp.ipa
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
